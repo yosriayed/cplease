@@ -22,7 +22,7 @@ set(SRCS
     channel.test.cpp
 )
 
-if(HAVE_STD_EXPECTED) 
+if(WITH_STD_EXPECTED) 
     list(APPEND SRCS expected_future.test.cpp async_expected_tasks.test.cpp)
 endif()
 

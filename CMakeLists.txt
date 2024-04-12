@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.8)
 
 project(cplease
 	VERSION 0.1
@@ -7,31 +7,19 @@ project(cplease
 	HOMEPAGE_URL "https://github.com/yosriayed/cplease"
 )
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(${PROJECT_NAME} INTERFACE)
 
-target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_23)
+target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
 target_include_directories(${PROJECT_NAME} INTERFACE include)
 
-include(CheckIncludeFileCXX)
-
-function(check_include_file_cxx_and_add_def hdr def)
-    check_include_file_cxx(${hdr} ${def})
-    message(STATUS "Checking for header ${hdr}")
-
-    if(${def})
-        add_definitions(-D${def})
-    endif()
-    message(STATUS " header ${def}")
-
-endfunction()
-
-check_include_file_cxx_and_add_def(expected HAVE_STD_EXPECTED)
-
-message(STATUS "HAVE_STD_EXPECTED: ${HAVE_STD_EXPECTED}")
-
 option(BUILD_TESTS "Build tests" OFF)
+option(WITH_STD_EXPECTED "Support std::expected specialisations" OFF)
+
+if(WITH_STD_EXPECTED)
+    message("Building with std::expected specialisations")
+	target_compile_definitions(${PROJECT_NAME} INTERFACE WITH_STD_EXPECTED)
+endif()
 
 if(BUILD_TESTS)
 

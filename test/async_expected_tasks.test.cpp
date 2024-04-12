@@ -572,3 +572,4 @@ TEST_CASE("expected_async_tasks: expected chain tasks asyncronously")
 
   CHECK(v.value() == 42);
 }
+

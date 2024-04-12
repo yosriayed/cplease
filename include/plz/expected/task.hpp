@@ -1,7 +1,7 @@
 #ifndef __EXPECTED_TASK_H__
 #define __EXPECTED_TASK_H__
 
-#ifdef HAVE_STD_EXPECTED
+#ifdef WITH_STD_EXPECTED
 
 #include <functional>
 #include <iostream>
@@ -10,8 +10,8 @@
 #include <tuple>
 #include <type_traits>
 
-#include "plz/task_base.hpp"
 #include "plz/help/type_traits.hpp"
+#include "plz/task_base.hpp"
 
 #include "future.hpp"
 
@@ -125,6 +125,6 @@ class task_with_stoptoken : public task_base
 };
 } // namespace plz::async::expected
 
-#endif // HAVE_STD_EXPECTED
+#endif // WITH_STD_EXPECTED
 
 #endif // __EXPECTED_TASK_H__

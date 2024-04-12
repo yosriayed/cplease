@@ -1,8 +1,8 @@
 #ifndef __EXPECTED_FUTURE_H__
 #define __EXPECTED_FUTURE_H__
 
-#ifdef HAVE_STD_EXPECTED
-
+#ifdef WITH_STD_EXPECTED
+ 
 #include <cassert>
 #include <condition_variable>
 #include <expected>
@@ -793,5 +793,5 @@ auto make_promise() noexcept -> promise<T, E>
 
 } // namespace plz::async::expected
 
-#endif // HAVE_STD_EXPECTED
+#endif // WITH_STD_EXPECTED
 #endif // __EXPECTED_FUTURE_H__

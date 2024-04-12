@@ -1,7 +1,8 @@
 #ifndef __EXPECTED_FUTURES_H__
 #define __EXPECTED_FUTURES_H__
 
-#ifdef HAVE_STD_EXPECTED
+
+#ifdef WITH_STD_EXPECTED
 
 #include <algorithm>
 #include <format>
@@ -259,5 +260,5 @@ class futures
 };
 } // namespace plz::async::expected
 
-#endif // HAVE_STD_EXPECTED
+#endif // WITH_STD_EXPECTED
 #endif // __EXPECTED_FUTURES_H__

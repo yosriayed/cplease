@@ -638,3 +638,4 @@ TEST_CASE("future: test then with move only type")
 
   CHECK(*value == 42);
 }
+

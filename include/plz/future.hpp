@@ -14,7 +14,10 @@
 #include <stdexcept>
 #include <type_traits>
 
+#ifdef WITH_STD_EXPECTED
 #include "plz/expected/future.hpp"
+#endif
+
 #include "plz/help/type_traits.hpp"
 
 namespace plz::async
@@ -67,8 +70,10 @@ class promise;
 template <typename T>
 promise<T> make_promise() noexcept;
 
+#ifdef WITH_STD_EXPECTED
 template <typename T, typename E>
 expected::promise<T, E> make_promise() noexcept;
+#endif
 
 ////////////////////////////
 // Implementation details //
@@ -812,11 +817,13 @@ promise<T> make_promise() noexcept
   return promise<T>();
 };
 
+#ifdef WITH_STD_EXPECTED
+
 template <typename T, typename E>
 expected::promise<T, E> make_promise() noexcept
 {
   return expected::make_promise<T, E>();
 }
-
+#endif
 } // namespace plz::async
 #endif // __FUTURE_H__

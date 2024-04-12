@@ -233,3 +233,4 @@ TEST_CASE("noexcept_future: test with move only type")
 
   CHECK(*value == 43);
 }
+

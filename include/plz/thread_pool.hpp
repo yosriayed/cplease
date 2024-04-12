@@ -17,7 +17,7 @@
 #include "task.hpp"
 #include "task_base.hpp"
 
-#ifdef HAVE_STD_EXPECTED
+#ifdef WITH_STD_EXPECTED
 #include "expected/futures.hpp"
 #include "expected/task.hpp"
 #endif
@@ -143,7 +143,7 @@ class thread_pool
     return future;
   }
 
-#ifdef HAVE_STD_EXPECTED
+#ifdef WITH_STD_EXPECTED
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args...> &&
     plz::specialization_of<std::invoke_result_t<Func, Args...>, std::expected>
@@ -516,6 +516,7 @@ auto future<T>::then(thread_pool* pool, Func&& t_func, Args&&... args)
     });
 }
 
+#ifdef WITH_STD_EXPECTED
 template <typename T, typename E>
 template <typename Func, typename... Args>
 auto expected::future<T, E>::then(thread_pool* pool, Func&& t_func, Args&&... args)
@@ -527,6 +528,7 @@ auto expected::future<T, E>::then(thread_pool* pool, Func&& t_func, Args&&... ar
       return pool->run(t_func, value, args...);
     });
 }
+#endif
 
 } // namespace plz::async
 
