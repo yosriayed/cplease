@@ -6,19 +6,19 @@
 
 #include <plz/future.hpp>
 
-TEST_CASE("noexcept future: simple set result")
+TEST_CASE("expected_future: simple set result")
 {
-  auto promise = plz::async::make_promise<int, std::string>();
+  auto promise = plz::make_promise<int, std::string>();
   auto future  = promise.get_future();
 
   promise.set_result(42);
 
-  REQUIRE(future.wait() == 42);
+  REQUIRE(future.get() == 42);
 }
 
-TEST_CASE("noexcept future: set result from another thread")
+TEST_CASE("expected_future: set result from another thread")
 {
-  auto promise = plz::async::make_promise<int, std::string>();
+  auto promise = plz::make_promise<int, std::string>();
   auto future  = promise.get_future();
 
   std::jthread t(
@@ -28,12 +28,12 @@ TEST_CASE("noexcept future: set result from another thread")
       promise.set_result(42);
     });
 
-  REQUIRE(future.wait() == 42);
+  REQUIRE(future.get() == 42);
 }
 
-TEST_CASE("noexcept future: set error from another thread")
+TEST_CASE("expected_future: set error from another thread")
 {
-  auto promise = plz::async::make_promise<int, std::string>();
+  auto promise = plz::make_promise<int, std::string>();
   auto future  = promise.get_future();
 
   std::jthread t(
@@ -44,7 +44,7 @@ TEST_CASE("noexcept future: set error from another thread")
       promise.set_result(std::unexpected("error"));
     });
 
-  REQUIRE(future.wait().error() == "error");
+  REQUIRE(future.get().error() == "error");
 }
 
 enum class Errcode
@@ -54,9 +54,9 @@ enum class Errcode
   error3
 };
 
-TEST_CASE("noexcept future: set enum errorfrom another thread")
+TEST_CASE("expected_future: set enum errorfrom another thread")
 {
-  auto promise = plz::async::make_promise<int, Errcode>();
+  auto promise = plz::make_promise<int, Errcode>();
   auto future  = promise.get_future();
 
   std::jthread t(
@@ -67,35 +67,35 @@ TEST_CASE("noexcept future: set enum errorfrom another thread")
       promise.set_result(std::unexpected(Errcode::error2));
     });
 
-  REQUIRE(future.wait().error() == Errcode::error2);
+  REQUIRE(future.get().error() == Errcode::error2);
 }
 
-TEST_CASE("noexcept future: void result type")
+TEST_CASE("expected_future: void result type")
 {
-  auto promise = plz::async::make_promise<void, std::string>();
+  auto promise = plz::make_promise<void, std::string>();
   auto future  = promise.get_future();
 
   promise.set_ready();
 
-  REQUIRE(future.wait().has_value() == true);
+  REQUIRE(future.get().has_value() == true);
 }
 
-TEST_CASE("noexcept future: void result type set error")
+TEST_CASE("expected_future: void result type set error")
 {
-  auto promise = plz::async::make_promise<void, std::string>();
+  auto promise = plz::make_promise<void, std::string>();
   auto future  = promise.get_future();
 
   promise.set_error("error");
 
-  REQUIRE(future.wait().error() == "error");
+  REQUIRE(future.get().error() == "error");
 }
 
-TEST_CASE("noexcept future: void result type then")
+TEST_CASE("expected_future: void result type then")
 {
-  auto promise = plz::async::make_promise<void, std::string>();
+  auto promise = plz::make_promise<void, std::string>();
 
   auto future = promise.get_future().then(
-    []() -> std::expected<int, std::string>
+    []()
     {
       return 42;
     });
@@ -107,12 +107,12 @@ TEST_CASE("noexcept future: void result type then")
       promise.set_ready();
     });
 
-  REQUIRE(future.wait() == 42);
+  REQUIRE(future.get() == 42);
 }
 
-TEST_CASE("noexcept future: then return unexpected")
+TEST_CASE("expected_future: then return unexpected")
 {
-  auto promise = plz::async::make_promise<void, std::string>();
+  auto promise = plz::make_promise<void, std::string>();
 
   auto future = promise.get_future().then(
     []() -> std::expected<int, std::string>
@@ -127,13 +127,13 @@ TEST_CASE("noexcept future: then return unexpected")
       promise.set_ready();
     });
 
-  REQUIRE(future.wait().has_value() == false);
-  REQUIRE(future.wait().error() == "error");
+  REQUIRE(future.get().has_value() == false);
+  REQUIRE(future.get().error() == "error");
 }
 
 auto async_func()
 {
-  auto promise = plz::async::make_promise<int, std::string>();
+  auto promise = plz::make_promise<int, std::string>();
 
   std::thread(
     [promise]() mutable
@@ -146,7 +146,7 @@ auto async_func()
   return promise.get_future();
 }
 
-TEST_CASE("noexcept future: async function")
+TEST_CASE("expected_future: async function")
 {
   auto future = async_func().then(
     [](int t_value) -> std::expected<int, std::string>
@@ -154,7 +154,7 @@ TEST_CASE("noexcept future: async function")
       return t_value;
     });
 
-  REQUIRE(future.wait() == 42);
+  REQUIRE(future.get() == 42);
 }
 
 enum class parse_error
@@ -165,7 +165,7 @@ enum class parse_error
 
 auto parse_number(std::string str)
 {
-  auto p      = plz::async::make_promise<double, parse_error>();
+  auto p      = plz::make_promise<double, parse_error>();
   auto future = p.get_future();
   std::thread{
     [p = std::move(p), str = std::move(str)]() mutable
@@ -194,17 +194,17 @@ auto parse_number(std::string str)
   return future;
 }
 
-TEST_CASE("noexcept future: cppreference std::expected test")
+TEST_CASE("expected_future: cppreference std::expected test")
 {
-  REQUIRE(parse_number("42").wait() == 42);
-  REQUIRE(parse_number("42abc").wait() == 42);
-  REQUIRE(parse_number("meow").wait().error() == parse_error::invalid_input);
-  REQUIRE(parse_number("inf").wait().error() == parse_error::overflow);
+  REQUIRE(parse_number("42").get() == 42);
+  REQUIRE(parse_number("42abc").get() == 42);
+  REQUIRE(parse_number("meow").get().error() == parse_error::invalid_input);
+  REQUIRE(parse_number("inf").get().error() == parse_error::overflow);
 }
 
 TEST_CASE("noexcept_future: test with move only type")
 {
-  auto promise = plz::async::make_promise<std::unique_ptr<int>, Errcode>();
+  auto promise = plz::make_promise<std::unique_ptr<int>, Errcode>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -216,7 +216,7 @@ TEST_CASE("noexcept_future: test with move only type")
     })
     .detach();
 
-  auto value = future.wait().value(); // Wait for the entire chain to complete
+  auto value = future.take().value(); // Wait for the entire chain to complete
 
   CHECK(*value == 42);
 
@@ -233,4 +233,3 @@ TEST_CASE("noexcept_future: test with move only type")
 
   CHECK(*value == 43);
 }
-

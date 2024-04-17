@@ -7,7 +7,7 @@
 
 TEST_CASE("future: same return type + syncrhonous tasks")
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
 
   auto future = promise.get_future()
                   .then(
@@ -30,12 +30,12 @@ TEST_CASE("future: same return type + syncrhonous tasks")
     })
     .detach();
 
-  CHECK(future.wait() == 42);
+  CHECK(future.get() == 42);
 }
 
 TEST_CASE("future: different return types + syncrhonous tasks", )
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -58,14 +58,14 @@ TEST_CASE("future: different return types + syncrhonous tasks", )
                    {
                      return std::stoi(value) - 1;
                    })
-                 .wait(); // Wait for the entire chain to complete
+                 .get(); // Wait for the entire chain to complete
 
   CHECK(value == 42);
 }
 
 TEST_CASE("future: syncrhonous tasks with exception 1")
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -96,7 +96,7 @@ TEST_CASE("future: syncrhonous tasks with exception 1")
         {
           REQUIRE(false); // shouldn't reach this code
         })
-      .wait(); // Wait for the entire chain to complete
+      .get(); // Wait for the entire chain to complete
   }
   catch(const int& e)
   {
@@ -107,7 +107,7 @@ TEST_CASE("future: syncrhonous tasks with exception 1")
 
 TEST_CASE("future: syncrhonous tasks with exception 2")
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -144,7 +144,7 @@ TEST_CASE("future: syncrhonous tasks with exception 2")
         {
           REQUIRE(false); // shouldn't reach this code
         })
-      .wait(); // Wait for the entire chain to complete
+      .get(); // Wait for the entire chain to complete
   }
   catch(int)
   {
@@ -158,7 +158,7 @@ TEST_CASE("future: syncrhonous tasks with exception 2")
 
 TEST_CASE("future: asyncrhonous tasks")
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -179,7 +179,7 @@ TEST_CASE("future: asyncrhonous tasks")
                  .then(
                    [](int value)
                    {
-                     auto promise = plz::async::make_promise<std::string>();
+                     auto promise = plz::make_promise<std::string>();
                      auto future  = promise.get_future();
 
                      // Simulating an asynchronous task
@@ -198,14 +198,14 @@ TEST_CASE("future: asyncrhonous tasks")
                    {
                      return std::stoi(value);
                    })
-                 .wait(); // Wait for the entire chain to complete
+                 .get(); // Wait for the entire chain to complete
 
   CHECK(value == 42);
 }
 
 TEST_CASE("future: asyncrhonous tasks with exception")
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -228,7 +228,7 @@ TEST_CASE("future: asyncrhonous tasks with exception")
       .then(
         [](int value)
         {
-          auto promise = plz::async::make_promise<std::string>();
+          auto promise = plz::make_promise<std::string>();
           auto future  = promise.get_future();
 
           // Simulating an asynchronous task
@@ -254,7 +254,7 @@ TEST_CASE("future: asyncrhonous tasks with exception")
         {
           return std::stoi(value);
         })
-      .wait(); // Wait for the entire chain to complete
+      .get(); // Wait for the entire chain to complete
   }
   catch(const std::exception& e)
   {
@@ -264,7 +264,7 @@ TEST_CASE("future: asyncrhonous tasks with exception")
 
 auto asynchTask1(int value)
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
 
   // Simulating an asynchronous task
   std::thread(
@@ -280,7 +280,7 @@ auto asynchTask1(int value)
 
 auto asynchTask2(int value)
 {
-  auto promise = plz::async::make_promise<std::string>();
+  auto promise = plz::make_promise<std::string>();
 
   // Simulating an asynchronous task
   std::thread(
@@ -296,7 +296,7 @@ auto asynchTask2(int value)
 
 auto asynchTask3(const std::string& value)
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
 
   // Simulating an asynchronous task
   std::thread(
@@ -314,7 +314,7 @@ TEST_CASE("future: asyncrhonous tasks functions")
 {
   try
   {
-    auto value = asynchTask1(42).then(asynchTask2).then(asynchTask3).wait();
+    auto value = asynchTask1(42).then(asynchTask2).then(asynchTask3).get();
     CHECK(value == 42);
   }
   catch(...)
@@ -325,7 +325,7 @@ TEST_CASE("future: asyncrhonous tasks functions")
 
 auto asynchTask2_5(std::string value)
 {
-  auto promise = plz::async::make_promise<std::string>();
+  auto promise = plz::make_promise<std::string>();
 
   // Simulating an asynchronous task
   std::thread(
@@ -351,7 +351,7 @@ TEST_CASE("future: asyncrhonous Tasks Functions With Exception")
 {
   try
   {
-    asynchTask1(42).then(asynchTask2).then(asynchTask2_5).then(asynchTask3).wait();
+    asynchTask1(42).then(asynchTask2).then(asynchTask2_5).then(asynchTask3).get();
   }
   catch(const std::exception& exception)
   {
@@ -361,7 +361,7 @@ TEST_CASE("future: asyncrhonous Tasks Functions With Exception")
 
 TEST_CASE("future: oexpectedion")
 {
-  auto promise = plz::async::make_promise<int>();
+  auto promise = plz::make_promise<int>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -412,7 +412,7 @@ TEST_CASE("future: oexpectedion")
         {
           REQUIRE(false); // shouldn't reach this code
         })
-      .wait(); // Wait for the entire chain to complete
+      .get(); // Wait for the entire chain to complete
   }
   catch(const int&)
   {
@@ -429,7 +429,7 @@ class FutureMemberFunctions
   public:
   auto memberAsynchTask1(int value)
   {
-    auto promise = plz::async::make_promise<int>();
+    auto promise = plz::make_promise<int>();
 
     // Simulating an asynchronous task
     std::thread(
@@ -445,7 +445,7 @@ class FutureMemberFunctions
 
   auto memberAsynchTask2(int value)
   {
-    auto promise = plz::async::make_promise<std::string>();
+    auto promise = plz::make_promise<std::string>();
 
     // Simulating an asynchronous task
     std::thread(
@@ -461,7 +461,7 @@ class FutureMemberFunctions
 
   auto memberAsynchTask2_5(std::string value)
   {
-    auto promise = plz::async::make_promise<std::string>();
+    auto promise = plz::make_promise<std::string>();
 
     throw std::runtime_error("error");
 
@@ -479,7 +479,7 @@ class FutureMemberFunctions
 
   auto memberAsynchTask3(std::string value)
   {
-    auto promise = plz::async::make_promise<int>();
+    auto promise = plz::make_promise<int>();
 
     // Simulating an asynchronous task
     std::thread(
@@ -505,7 +505,7 @@ TEST_CASE("future: futureMemberFunctions + AsynchronousTasks")
                    {
                      return value;
                    })
-                 .wait();
+                 .get();
 
   CHECK(value == 42);
 }
@@ -523,7 +523,7 @@ TEST_CASE("future: futureMemberFunctions + AsynchronousTasksWithException")
         {
           return std::stoi(value);
         })
-      .wait();
+      .get();
   }
   catch(const std::exception& exception)
   {
@@ -553,7 +553,7 @@ TEST_CASE("future: test with non blocking wait")
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-  CHECK(future.wait() == 42);
+  CHECK(future.get() == 42);
 }
 
 TEST_CASE("future:Then with variadic arguments")
@@ -581,12 +581,12 @@ TEST_CASE("future:Then with variadic arguments")
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-  CHECK(future.wait() == 42);
+  CHECK(future.get() == 42);
 }
 
 TEST_CASE("future: test with move only type")
 {
-  auto promise = plz::async::make_promise<std::unique_ptr<int>>();
+  auto promise = plz::make_promise<std::unique_ptr<int>>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -604,12 +604,12 @@ TEST_CASE("future: test with move only type")
 
   promise.set_result(std::make_unique<int>(43));
 
-  CHECK(*future.wait() == 43);
+  CHECK(*future.take() == 43);
 }
 
 TEST_CASE("future: test then with move only type")
 {
-  auto promise = plz::async::make_promise<std::unique_ptr<int>>();
+  auto promise = plz::make_promise<std::unique_ptr<int>>();
   auto future  = promise.get_future();
 
   // Simulating an asynchronous task
@@ -634,7 +634,7 @@ TEST_CASE("future: test then with move only type")
                    })
                  .take();
 
-  auto c = future.wait();
+  auto c = future.take();
 
   CHECK(*value == 42);
 }

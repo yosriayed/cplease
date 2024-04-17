@@ -3,10 +3,10 @@
 
 #include <stop_token>
 
-class task_base
+class packaged_task_base
 {
   public:
-  virtual ~task_base()                       = default;
+  virtual ~packaged_task_base()                       = default;
   virtual void run(std::stop_token thread_stop_token) = 0;
 };
 

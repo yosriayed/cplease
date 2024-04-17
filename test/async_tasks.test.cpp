@@ -9,7 +9,7 @@
 #include <random>
 #include <string>
 
-#include <plz/task.hpp>
+#include <plz/packaged_task.hpp>
 #include <plz/thread_pool.hpp>
 
 using namespace std::literals::chrono_literals;
@@ -22,13 +22,13 @@ static int foo(int i, int x)
 
 TEST_CASE("async_tasks: run async global instance")
 {
-  REQUIRE(plz::async::run(foo, 1, 2).wait() == 3);
-  plz::async::wait();
+  REQUIRE(plz::run(foo, 1, 2).get() == 3);
+  plz::wait();
 }
 
 TEST_CASE("async_tasks: enqueue and execute a task")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   int result = 0;
 
@@ -47,7 +47,7 @@ TEST_CASE("async_tasks: enqueue and execute a task")
 
 TEST_CASE("async_tasks: enqueue and execute multiple tasks")
 {
-  plz::async::thread_pool pool(3);
+  plz::thread_pool pool(3);
 
   int result = 0;
 
@@ -69,7 +69,7 @@ TEST_CASE("async_tasks: enqueue and execute multiple tasks")
 
 TEST_CASE("async_tasks: enqueue and execute tasks with futures")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto task = [](int x)
   {
@@ -81,14 +81,14 @@ TEST_CASE("async_tasks: enqueue and execute tasks with futures")
   auto future = pool.run(task, 42);
 
   // Retrieve the result from the future
-  int result = future.wait();
+  int result = future.get();
 
   REQUIRE(result == 42);
 }
 
 TEST_CASE("async_tasks: enqueue on stopped ThreadPool")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   pool.quit(); // Stop the ThreadPool
 
@@ -97,13 +97,13 @@ TEST_CASE("async_tasks: enqueue on stopped ThreadPool")
                         []
                         {
                         })
-                      .wait(),
+                      .get(),
     std::runtime_error);
 }
 
 TEST_CASE("async_tasks: enqueue on full ThreadPool")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto task = [](int x)
   {
@@ -115,14 +115,14 @@ TEST_CASE("async_tasks: enqueue on full ThreadPool")
   auto future = pool.run(task, 42);
 
   // Retrieve the result from the future
-  int result = future.wait();
+  int result = future.get();
 
   REQUIRE(result == 42);
 }
 
 TEST_CASE("async_tasks: chain using future::then")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto v = pool
              .run(
@@ -141,14 +141,14 @@ TEST_CASE("async_tasks: chain using future::then")
                {
                  return x - 1;
                })
-             .wait();
+             .get();
 
   CHECK(v == 42);
 }
 
 TEST_CASE("async_tasks: exception")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   REQUIRE_THROWS_AS(pool
                       .run(
@@ -168,13 +168,13 @@ TEST_CASE("async_tasks: exception")
                         {
                           return x - 1;
                         })
-                      .wait(),
+                      .get(),
     int);
 }
 
 TEST_CASE("async_tasks: cancellable task")
 {
-  plz::async::thread_pool pool(2);
+  plz::thread_pool pool(2);
   std::stop_source src;
 
   auto v = pool.run(
@@ -201,7 +201,7 @@ TEST_CASE("async_tasks: wait")
 {
   const int numTasks = 100; // Adjust the number of tasks as needed
 
-  plz::async::thread_pool pool(16);
+  plz::thread_pool pool(16);
 
   // Submit tasks to the threadpool
   for(int i = 0; i < numTasks; ++i)
@@ -219,7 +219,7 @@ TEST_CASE("async_tasks: wait")
 
 TEST_CASE("async_tasks: map")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::array vec = { 1, 2, 3, 4, 5, 6, 7, 8 };
   auto f         = pool.map(vec,
@@ -238,14 +238,14 @@ TEST_CASE("async_tasks: map")
                   }
                   return acc;
                 })
-               .wait();
+               .get();
 
   CHECK(sum == 44);
 }
 
 TEST_CASE("async_tasks: map on string chars")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::string name = "yosri";
 
@@ -269,7 +269,7 @@ TEST_CASE("async_tasks: map on string chars")
 
                            return r;
                          })
-                       .wait();
+                       .get();
 
     CHECK(uppername == "YOSRI");
   }
@@ -280,7 +280,7 @@ TEST_CASE("async_tasks: map on string chars")
 
 TEST_CASE("async_tasks: map individual handling of results")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::string name = "yosri";
 
@@ -320,25 +320,25 @@ TEST_CASE("async_tasks: map individual handling of results")
       CHECK(c == 'I');
     });
 
-  CHECK(std::string(futures.wait().data(), 5) == "YOSRI");
+  CHECK(std::string(futures.get().data(), 5) == "YOSRI");
 }
 
 TEST_CASE("async_tasks: async_map")
 {
   std::string name = "yosri";
 
-  auto r = plz::async::map(name,
+  auto r = plz::map(name,
     [](auto i) -> char
     {
       return std::toupper(i);
     });
 
-  CHECK(std::memcmp(r.wait().data(), "YOSRI", 5) == 0);
+  CHECK(std::memcmp(r.get().data(), "YOSRI", 5) == 0);
 }
 
 TEST_CASE("async_tasks: map throw exception")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::string name = "yosri";
 
@@ -382,7 +382,7 @@ TEST_CASE("async_tasks: map throw exception")
       CHECK(c == 'I');
     });
 
-  CHECK_THROWS_AS(std::string(futures.wait().data(), 5) == "YOSRI", std::runtime_error);
+  CHECK_THROWS_AS(std::string(futures.get().data(), 5) == "YOSRI", std::runtime_error);
 }
 
 static int randomDelayFunction(int i)
@@ -405,21 +405,21 @@ TEST_CASE("async_tasks: map tasks with random delays")
   v.resize(size);
   std::iota(v.begin(), v.end(), 0);
 
-  auto f = plz::async::map(v, randomDelayFunction)
+  auto f = plz::map(v, randomDelayFunction)
              .then(
                [](const auto& r)
                {
                  auto ac = std::accumulate(r.begin(), r.end(), 0);
                  return ac;
                })
-             .wait();
+             .get();
 
   CHECK(f == 0);
 }
 
 TEST_CASE("async_tasks: chain tasks asyncronously")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto v = pool
              .run(
@@ -438,7 +438,7 @@ TEST_CASE("async_tasks: chain tasks asyncronously")
                {
                  return x - 1;
                })
-             .wait();
+             .get();
 
   CHECK(v == 42);
 }
@@ -450,21 +450,21 @@ TEST_CASE("async_tasks: map with Chain tasks asyncronously", )
   v.resize(size);
   std::iota(v.begin(), v.end(), 0);
 
-  auto f = plz::async::map(v, randomDelayFunction)
+  auto f = plz::map(v, randomDelayFunction)
              .async_then(
                [](const auto& r)
                {
                  auto ac = std::accumulate(r.begin(), r.end(), 0);
                  return ac;
                })
-             .wait();
+             .get();
 
   CHECK(f == 0);
 }
 
 TEST_CASE("async_tasks: close tasks with jthread's stop token")
 {
-  plz::async::thread_pool pool(3);
+  plz::thread_pool pool(3);
 
   pool.run(
     [](int i, std::stop_token token)

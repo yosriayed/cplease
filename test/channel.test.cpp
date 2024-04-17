@@ -159,7 +159,7 @@ TEST_CASE("channel: notify function")
   src.register_notify_function(
     [sink = std::move(sink)](size_t count) mutable
     {
-      plz::async::run(
+      plz::run(
         [&sink](size_t count)
         {
           sink.read_using(
@@ -174,7 +174,7 @@ TEST_CASE("channel: notify function")
         count);
     });
 
-  plz::async::run(
+  plz::run(
     [&src]
     {
       for(int i = 0; i < 10; i++)
@@ -184,7 +184,7 @@ TEST_CASE("channel: notify function")
       }
     });
 
-  plz::async::wait();
+  plz::wait();
 }
 
 TEST_CASE("channel: connect")
@@ -206,9 +206,9 @@ TEST_CASE("channel: connect")
     {
       return size;
     },
-    &plz::async::thread_pool::global_instance());
+    &plz::thread_pool::global_instance());
 
-  plz::async::run(
+  plz::run(
     [&src]
     {
       for(int i = 0; i < 10; i++)
@@ -218,7 +218,7 @@ TEST_CASE("channel: connect")
       }
     });
 
-  plz::async::wait();
+  plz::wait();
 }
 
 TEST_CASE("spmc_channel: connect data integrality")
@@ -255,7 +255,7 @@ TEST_CASE("spmc_channel: connect data integrality")
       });
   }
 
-  plz::async::run(
+  plz::run(
     [&src, data = std::string_view(data)]
     {
       constexpr int num_writes = 10;
@@ -269,7 +269,7 @@ TEST_CASE("spmc_channel: connect data integrality")
         index += num_bytes;
       }
     })
-    .wait();
+    .get();
 
   for(int i = 0; i < num_sinks; i++)
   {

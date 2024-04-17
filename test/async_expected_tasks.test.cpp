@@ -9,7 +9,7 @@
 #include <random>
 #include <string>
 
-#include <plz/expected/task.hpp>
+#include <plz/expected/packaged_task.hpp>
 #include <plz/thread_pool.hpp>
 
 using namespace std::literals::chrono_literals;
@@ -29,13 +29,13 @@ static auto foo(int i, int x) -> std::expected<int, error_code>
 
 TEST_CASE("expected_async_tasks: run async global instance")
 {
-  REQUIRE(plz::async::run(foo, 1, 2).wait().value() == 3);
-  plz::async::wait();
+  REQUIRE(plz::run(foo, 1, 2).get().value() == 3);
+  plz::wait();
 }
 
 TEST_CASE("expected_async_tasks: enqueue and execute a task")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   int result = 0;
 
@@ -55,7 +55,7 @@ TEST_CASE("expected_async_tasks: enqueue and execute a task")
 
 TEST_CASE("expected_async_tasks: enqueue and execute multiple tasks")
 {
-  plz::async::thread_pool pool(3);
+  plz::thread_pool pool(3);
 
   int result = 0;
 
@@ -78,7 +78,7 @@ TEST_CASE("expected_async_tasks: enqueue and execute multiple tasks")
 
 TEST_CASE("expected_async_tasks: enqueue and execute tasks with futures")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto task = [](int x) -> std::expected<int, error_code>
   {
@@ -90,14 +90,14 @@ TEST_CASE("expected_async_tasks: enqueue and execute tasks with futures")
   auto future = pool.run(task, 42);
 
   // Retrieve the result from the future
-  int result = future.wait().value();
+  int result = future.get().value();
 
   REQUIRE(result == 42);
 }
 
 TEST_CASE("expected_async_tasks: enqueue on stopped ThreadPool")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   pool.quit(); // Stop the ThreadPool
 
@@ -107,13 +107,13 @@ TEST_CASE("expected_async_tasks: enqueue on stopped ThreadPool")
                         {
                           return {};
                         })
-                      .wait(),
+                      .get(),
     std::runtime_error);
 }
 
 TEST_CASE("expected_async_tasks: enqueue on full ThreadPool")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto task = [](int x) -> std::expected<int, error_code>
   {
@@ -125,14 +125,14 @@ TEST_CASE("expected_async_tasks: enqueue on full ThreadPool")
   auto future = pool.run(task, 42);
 
   // Retrieve the result from the future
-  int result = future.wait().value();
+  int result = future.get().value();
 
   REQUIRE(result == 42);
 }
 
 TEST_CASE("expected_async_tasks: chain using future::then")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto v = pool
              .run(
@@ -151,7 +151,7 @@ TEST_CASE("expected_async_tasks: chain using future::then")
                {
                  return x - 1;
                })
-             .wait()
+             .get()
              .value();
 
   CHECK(v == 42);
@@ -159,7 +159,7 @@ TEST_CASE("expected_async_tasks: chain using future::then")
 
 TEST_CASE("expected_async_tasks: exception")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
   auto expected = pool
                     .run(
                       []() -> std::expected<int, error_code>
@@ -177,14 +177,14 @@ TEST_CASE("expected_async_tasks: exception")
                       {
                         return x - 1;
                       })
-                    .wait();
+                    .get();
   REQUIRE(expected.has_value() == false);
   REQUIRE(expected.error() == error_code::error1);
 }
 
 TEST_CASE("expected_async_tasks: cancellable task")
 {
-  plz::async::thread_pool pool(2);
+  plz::thread_pool pool(2);
   std::stop_source src;
 
   auto v = pool.run(
@@ -213,7 +213,7 @@ TEST_CASE("expected_async_tasks: wait")
 {
   const int numTasks = 100; // Adjust the number of tasks as needed
 
-  plz::async::thread_pool pool(16);
+  plz::thread_pool pool(16);
 
   // Submit tasks to the threadpool
   for(int i = 0; i < numTasks; ++i)
@@ -232,7 +232,7 @@ TEST_CASE("expected_async_tasks: wait")
 
 TEST_CASE("expected_async_tasks: map")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::array vec = { 1, 2, 3, 4, 5, 6, 7, 8 };
   auto f         = pool.map(vec,
@@ -251,14 +251,14 @@ TEST_CASE("expected_async_tasks: map")
                   }
                   return acc;
                 })
-               .wait();
+               .get();
 
   CHECK(sum == 44);
 }
 
 TEST_CASE("expected_async_tasks: map on string chars")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::string name = "yosri";
 
@@ -280,14 +280,14 @@ TEST_CASE("expected_async_tasks: map on string chars")
 
                          return r;
                        })
-                     .wait();
+                     .get();
 
   CHECK(uppername.value() == "YOSRI");
 }
 
 TEST_CASE("expected_async_tasks: map individual handling of results")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::string name = "yosri";
 
@@ -327,14 +327,14 @@ TEST_CASE("expected_async_tasks: map individual handling of results")
       CHECK(c == 'I');
     });
 
-  CHECK(std::string(futures.wait().value().data(), 5) == "YOSRI");
+  CHECK(std::string(futures.get().value().data(), 5) == "YOSRI");
 }
 
 TEST_CASE("expected_async_tasks: async_map", "[ThreadPool]")
 {
   std::string name = "yosri";
 
-  auto r = plz::async::map(name,
+  auto r = plz::map(name,
     [](auto i) -> std::expected<char, error_code>
     {
       return std::toupper(i);
@@ -345,14 +345,14 @@ TEST_CASE("expected_async_tasks: async_map", "[ThreadPool]")
                  CHECK(std::memcmp(res.data(), "YOSRI", 5) == 0);
                });
 
-  plz::async::wait();
+  plz::wait();
 
-  CHECK(std::memcmp(r.wait().value().data(), "YOSRI", 5) == 0);
+  CHECK(std::memcmp(r.get().value().data(), "YOSRI", 5) == 0);
 }
 
 TEST_CASE("expected_async_tasks: map throw exception")
 {
-  plz::async::thread_pool pool(4);
+  plz::thread_pool pool(4);
 
   std::string name = "yosri";
 
@@ -396,7 +396,7 @@ TEST_CASE("expected_async_tasks: map throw exception")
       CHECK(c == 'I');
     });
 
-  CHECK(futures.wait().error() == error_code::error2);
+  CHECK(futures.get().error() == error_code::error2);
 }
 
 static auto randomDelayFunction(int i) -> std::expected<int, error_code>
@@ -419,21 +419,21 @@ TEST_CASE("expected_async_tasks: map tasks with random delays")
   v.resize(size);
   std::iota(v.begin(), v.end(), 0);
 
-  auto f = plz::async::map(v, randomDelayFunction)
+  auto f = plz::map(v, randomDelayFunction)
              .then(
                [](const auto& r)
                {
                  auto ac = std::accumulate(r.begin(), r.end(), 0);
                  return ac;
                })
-             .wait();
+             .get();
 
   CHECK(f == 0);
 }
 
 TEST_CASE("expected_async_tasks: chain tasks asyncronously")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto v = pool
              .run(
@@ -452,7 +452,7 @@ TEST_CASE("expected_async_tasks: chain tasks asyncronously")
                {
                  return x - 1;
                })
-             .wait();
+             .get();
 
   CHECK(v == 42);
 }
@@ -464,21 +464,21 @@ TEST_CASE("expected_async_tasks: map with Chain tasks asyncronously", )
   v.resize(size);
   std::iota(v.begin(), v.end(), 0);
 
-  auto f = plz::async::map(v, randomDelayFunction)
+  auto f = plz::map(v, randomDelayFunction)
              .async_then(
                [](const auto& r) -> std::expected<int, error_code>
                {
                  auto ac = std::accumulate(r.begin(), r.end(), 0);
                  return ac;
                })
-             .wait();
+             .get();
 
   CHECK(f.value() == 0);
 }
 
 TEST_CASE("expected_async_tasks: close tasks with jthread's stop token")
 {
-  plz::async::thread_pool pool(3);
+  plz::thread_pool pool(3);
 
   pool.run(
     [](int i, std::stop_token token) -> std::expected<void, error_code>
@@ -510,7 +510,7 @@ TEST_CASE("expected_async_tasks: close tasks with jthread's stop token")
 
 TEST_CASE("expected_async_tasks: expected run")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto task = [](int x)
   {
@@ -521,7 +521,7 @@ TEST_CASE("expected_async_tasks: expected run")
   auto future = pool.run(task, 84);
 
   // Retrieve the result from the future
-  auto result = future.wait();
+  auto result = future.get();
 
   REQUIRE(result.value() == 42);
 
@@ -537,14 +537,14 @@ TEST_CASE("expected_async_tasks: expected run")
                        return std::to_string(x);
                      });
 
-  auto result2 = future2.wait();
+  auto result2 = future2.get();
 
   REQUIRE(result2.error() == 'e');
 }
 
 TEST_CASE("expected_async_tasks: expected chain tasks asyncronously")
 {
-  plz::async::thread_pool pool(1);
+  plz::thread_pool pool(1);
 
   auto v = pool
              .run(
@@ -568,8 +568,7 @@ TEST_CASE("expected_async_tasks: expected chain tasks asyncronously")
                {
                  return 0;
                })
-             .wait();
+             .get();
 
   CHECK(v.value() == 42);
 }
-

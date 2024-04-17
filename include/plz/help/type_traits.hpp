@@ -1,9 +1,9 @@
 #ifndef TYPE_TRAITS_H
 #define TYPE_TRAITS_H
 
+#include <format>
 #include <tuple>
 #include <type_traits>
-#include <format>
 
 namespace plz
 {
@@ -121,11 +121,6 @@ struct function_traits<Ret (Class::*)(Args...) const> : function_traits<Ret(Args
 template <typename Lambda>
 struct function_traits : function_traits<decltype(&Lambda::operator())>
 {
-};
-
-template <typename T>
-concept is_formattable = requires(T& v, std::format_context ctx) {
-  std::formatter<std::remove_cvref_t<T>>().format(v, ctx);
 };
 
 } // namespace plz

@@ -11,15 +11,15 @@
 #include "plz/help/type_traits.hpp"
 
 #include "future.hpp"
-#include "task_base.hpp"
+#include "packaged_task_base.hpp"
 
-namespace plz::async
+namespace plz
 {
 
 template <typename Function, typename... Args>
-class task : public task_base
+class packaged_task : public packaged_task_base
 {
-  friend class plz::async::thread_pool;
+  friend class plz::thread_pool;
 
   public:
   using function_arguments = typename std::tuple<std::decay_t<Args>...>;
@@ -30,16 +30,16 @@ class task : public task_base
 
   using future_type = future<function_return_type>;
 
-  task(Function&& t_func, Args&&... t_args)
-    : m_func{ std::forward<Function>(t_func) },
+  packaged_task(Function&& func, Args&&... t_args)
+    : m_func{ std::forward<Function>(func) },
       m_arguments{ std::forward<Args>(t_args)... },
       m_promise{ make_promise<function_return_type>() }
   {
   }
 
-  task(const task&)            = delete;
-  task& operator=(const task&) = delete;
-  task(task&& t_other)
+  packaged_task(const packaged_task&)            = delete;
+  packaged_task& operator=(const packaged_task&) = delete;
+  packaged_task(packaged_task&& t_other)
   {
     std::swap(m_func, t_other.m_func);
     std::swap(m_arguments, t_other.m_arguments);
@@ -78,7 +78,7 @@ class task : public task_base
 };
 
 template <typename Function, typename... Args>
-class task_with_stoptoken : public task_base
+class packaged_task_st : public packaged_task_base
 {
   friend class thread_pool;
 
@@ -92,16 +92,16 @@ class task_with_stoptoken : public task_base
 
   using future_type = future<function_return_type>;
 
-  task_with_stoptoken(Function&& t_func, Args&&... t_args)
-    : m_func{ std::forward<Function>(t_func) },
+  packaged_task_st(Function&& func, Args&&... t_args)
+    : m_func{ std::forward<Function>(func) },
       m_arguments{ std::forward<Args>(t_args)... },
       m_promise{ make_promise<function_return_type>() }
   {
   }
 
-  task_with_stoptoken(const task_with_stoptoken&) = delete;
-  task_with_stoptoken& operator=(const task_with_stoptoken&) = delete;
-  task_with_stoptoken(task_with_stoptoken&& t_other)
+  packaged_task_st(const packaged_task_st&)            = delete;
+  packaged_task_st& operator=(const packaged_task_st&) = delete;
+  packaged_task_st(packaged_task_st&& t_other)
   {
     std::swap(m_func, t_other.m_func);
     std::swap(m_arguments, t_other.m_arguments);
@@ -141,6 +141,6 @@ class task_with_stoptoken : public task_base
   promise<function_return_type> m_promise;
   std::stop_token m_stop_token;
 };
-} // namespace plz::async
+} // namespace plz
 
 #endif // __ASYNC_TASK_H__&

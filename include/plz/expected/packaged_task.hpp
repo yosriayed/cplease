@@ -11,19 +11,19 @@
 #include <type_traits>
 
 #include "plz/help/type_traits.hpp"
-#include "plz/task_base.hpp"
+#include "plz/packaged_task_base.hpp"
 
 #include "future.hpp"
 
-namespace plz::async::expected
+namespace plz::expected
 {
 
 template <typename Function, typename... Args>
   requires std::invocable<Function, Args...> &&
   specialization_of<std::invoke_result_t<Function, Args...>, std::expected>
-class task : public task_base
+class packaged_task : public packaged_task_base
 {
-  friend class plz::async::thread_pool;
+  friend class plz::thread_pool;
 
   public:
   using function_arguments = typename std::tuple<std::decay_t<Args>...>;
@@ -37,16 +37,16 @@ class task : public task_base
 
   using future_type = future<expected_value_type, expected_error_type>;
 
-  task(Function&& t_func, Args&&... t_args)
-    : m_func{ std::forward<Function>(t_func) },
+  packaged_task(Function&& func, Args&&... t_args)
+    : m_func{ std::forward<Function>(func) },
       m_arguments{ std::forward<Args>(t_args)... },
       m_promise{ make_promise<expected_value_type, expected_error_type>() }
   {
   }
 
-  task(const task&)            = delete;
-  task& operator=(const task&) = delete;
-  task(task&& t_other)
+  packaged_task(const packaged_task&)            = delete;
+  packaged_task& operator=(const packaged_task&) = delete;
+  packaged_task(packaged_task&& t_other)
   {
     std::swap(m_func, t_other.m_func);
     std::swap(m_arguments, t_other.m_arguments);
@@ -72,9 +72,9 @@ class task : public task_base
 template <typename Function, typename... Args>
   requires std::invocable<Function, Args..., std::stop_token> &&
   specialization_of<std::invoke_result_t<Function, Args..., std::stop_token>, std::expected>
-class task_with_stoptoken : public task_base
+class packaged_task_st : public packaged_task_base
 {
-  friend class plz::async::thread_pool;
+  friend class plz::thread_pool;
 
   public:
   using function_arguments = typename std::tuple<std::decay_t<Args>...>;
@@ -89,16 +89,16 @@ class task_with_stoptoken : public task_base
 
   using future_type = future<expected_value_type, expected_error_type>;
 
-  task_with_stoptoken(Function&& t_func, Args&&... t_args)
-    : m_func{ std::forward<Function>(t_func) },
+  packaged_task_st(Function&& func, Args&&... t_args)
+    : m_func{ std::forward<Function>(func) },
       m_arguments{ std::forward<Args>(t_args)... },
       m_promise{ make_promise<expected_value_type, expected_error_type>() }
   {
   }
 
-  task_with_stoptoken(const task_with_stoptoken&)            = delete;
-  task_with_stoptoken& operator=(const task_with_stoptoken&) = delete;
-  task_with_stoptoken(task_with_stoptoken&& t_other)
+  packaged_task_st(const packaged_task_st&)            = delete;
+  packaged_task_st& operator=(const packaged_task_st&) = delete;
+  packaged_task_st(packaged_task_st&& t_other)
   {
     std::swap(m_func, t_other.m_func);
     std::swap(m_arguments, t_other.m_arguments);
@@ -123,7 +123,7 @@ class task_with_stoptoken : public task_base
   promise<expected_value_type, expected_error_type> m_promise;
   std::stop_token m_stop_token;
 };
-} // namespace plz::async::expected
+} // namespace plz::expected
 
 #endif // WITH_STD_EXPECTED
 

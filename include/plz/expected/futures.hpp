@@ -14,18 +14,18 @@
 
 #include "future.hpp"
 
-namespace plz::async
+namespace plz
 {
 class thread_pool;
 }
 
-namespace plz::async::expected
+namespace plz::expected
 {
 
 template <typename T, typename E, std::ranges::range KeysRange = std::vector<T>>
 class futures
 {
-  friend class plz::async::thread_pool;
+  friend class plz::thread_pool;
 
   public:
   using key_type    = std::ranges::range_value_t<KeysRange>;
@@ -185,64 +185,64 @@ class futures
 
   std::expected<result_type, error_type> wait(const size_t& index) const
   {
-    return get_future(index).wait();
+    return get_future(index).get();
   }
 
   std::expected<result_type, error_type> wait(const key_type& key) const
   {
-    return get_future(key).wait();
+    return get_future(key).get();
   }
 
-  std::expected<aggregate_result_type, aggregate_error_type> wait() const
+  std::expected<aggregate_result_type, aggregate_error_type> get() const
   {
-    return get_aggregate_future().wait();
+    return get_aggregate_future().get();
   }
 
   template <typename Func, typename... Args>
     requires std::same_as<std::invoke_result_t<Func, aggregate_result_type, Args...>, void>
-  auto then(Func&& t_func, Args&&... args)
+  auto then(Func&& func, Args&&... args)
   {
     auto aggregate_future = get_aggregate_future();
-    aggregate_future.then(std::forward<Func>(t_func), std::forward<Args>(args)...);
+    aggregate_future.then(std::forward<Func>(func), std::forward<Args>(args)...);
     return aggregate_future;
   }
 
   template <typename Context, typename Func, typename... Args>
     requires std::same_as<std::invoke_result_t<Func, Context&, aggregate_result_type, Args...>, void>
-  auto then(Context* t_context, Func&& t_func, Args&&... args)
+  auto then(Context* context, Func&& func, Args&&... args)
   {
     auto aggregate_future = get_aggregate_future();
     aggregate_future.then(
-      t_context, std::forward<Func>(t_func), std::forward<Args>(args)...);
+      context, std::forward<Func>(func), std::forward<Args>(args)...);
     return aggregate_future;
   }
 
   template <typename Func, typename... Args>
-  auto then(Func&& t_func, Args&&... args)
+  auto then(Func&& func, Args&&... args)
   {
     return get_aggregate_future().then(
-      std::forward<Func>(t_func), std::forward<Args>(args)...);
+      std::forward<Func>(func), std::forward<Args>(args)...);
   }
 
   template <typename Context, typename Func, typename... Args>
-  auto then(Context* t_context, Func&& t_func, Args&&... args)
+  auto then(Context* context, Func&& func, Args&&... args)
   {
     return get_aggregate_future().then(
-      t_context, std::forward<Func>(t_func), std::forward<Args>(args)...);
+      context, std::forward<Func>(func), std::forward<Args>(args)...);
   }
 
   template <typename Func, typename... Args>
-  auto async_then(thread_pool* t_pool, Func&& t_func, Args&&... args)
+  auto async_then(thread_pool* t_pool, Func&& func, Args&&... args)
   {
     return get_aggregate_future().async_then(
-      t_pool, std::forward<Func>(t_func), std::forward<Args>(args)...);
+      t_pool, std::forward<Func>(func), std::forward<Args>(args)...);
   }
 
   template <typename Func, typename... Args>
-  auto async_then(Func&& t_func, Args&&... args)
+  auto async_then(Func&& func, Args&&... args)
   {
     return get_aggregate_future().async_then(
-      std::forward<Func>(t_func), std::forward<Args>(args)...);
+      std::forward<Func>(func), std::forward<Args>(args)...);
   }
 
   template <typename Func>
@@ -258,7 +258,7 @@ class futures
     return m_aggregate_promise.get_future();
   }
 };
-} // namespace plz::async::expected
+} // namespace plz::expected
 
 #endif // WITH_STD_EXPECTED
 #endif // __EXPECTED_FUTURES_H__

@@ -20,34 +20,8 @@
 
 #include "plz/help/type_traits.hpp"
 
-namespace plz::async
+namespace plz
 {
-
-// The pair of future and promise classes are similiar to std::promise
-// and std::future. They provide a mechanism to to access the result of asynchronous operations.
-
-// The creator of the promise class can set a value
-// using the set_result() or set an exception using set_exception(). The
-// associated future object can retrieve the value using the wait() method which
-// will block the calling thread until the promise is fulfilled.
-
-// If an exception is thrown during the computation, the wait() method will rethrow the exception.
-
-// The future class also provides a then() method that allows the user to attach
-// an arbitray continuation to the result of the future, which will be executed
-// when the result is ready. The then() method returns a new future that
-// represents the result of the continuation.
-
-// The future class also provides an on_exception() method that
-// allows the user to attach an exception handler to the future, which will be
-// executed when an exception is thrown during the computation.
-
-// The exception handler can be a function that takes a std::exception_ptr as an
-// argument which will handle any type of exception, or a function that takes a
-// specific exception type as an argument which will be invoked if that specific
-// expection was set on the promise. The on_exception() method returns a
-// reference to the future object, so that multiple exception handlers can be
-// attached to the same future.
 
 //////////////////////////
 // Forward declarations //
@@ -90,12 +64,12 @@ template <typename T>
 class state
 {
   template <typename X>
-  friend class plz::async::future;
+  friend class plz::future;
 
   template <typename X>
-  friend class plz::async::promise;
+  friend class plz::promise;
 
-  friend class plz::async::thread_pool;
+  friend class plz::thread_pool;
 
   using result_type = T;
 
@@ -144,12 +118,12 @@ template <>
 class state<void>
 {
   template <typename X>
-  friend class plz::async::future;
+  friend class plz::future;
 
   template <typename X>
-  friend class plz::async::promise;
+  friend class plz::promise;
 
-  friend class plz::async::thread_pool;
+  friend class plz::thread_pool;
 
   mutable std::mutex m_mutex;
   std::condition_variable m_condition_variable;
@@ -198,7 +172,8 @@ class future
   public:
   using result_type = T;
 
-  result_type wait()
+  result_type get()
+    requires(std::is_same_v<result_type, void> || std::is_copy_constructible_v<result_type>)
   {
     std::unique_lock lock(m_shared_state->m_mutex);
 
@@ -215,15 +190,7 @@ class future
 
     if constexpr(!std::is_void_v<result_type>)
     {
-      if constexpr(std::is_copy_constructible_v<result_type>)
-      {
-        return m_shared_state->m_result;
-      }
-      else
-      {
-        m_shared_state->m_is_ready = false;
-        return std::move(m_shared_state->m_result);
-      }
+      return m_shared_state->m_result;
     }
   }
 
@@ -245,14 +212,14 @@ class future
 
   template <typename Func, typename... Args>
     requires std::same_as<std::invoke_result_t<Func, result_type, Args...>, void>
-  auto& then(Func&& t_func, Args&&... args)
+  auto& then(Func&& func, Args&&... args)
   {
     std::lock_guard lock(m_shared_state->m_mutex);
 
     m_shared_state->m_success_handlers.push_back(
-      [t_func, ... args = std::forward<Args>(args)](const result_type& value) mutable
+      [func, ... args = std::forward<Args>(args)](const result_type& value) mutable
       {
-        t_func(value, args...);
+        func(value, args...);
       });
 
     return *this;
@@ -261,14 +228,14 @@ class future
   template <typename Context, typename Func, typename... Args>
     requires std::same_as<std::invoke_result_t<Func, Context&, result_type, Args...>, void> &&
     (!std::same_as<Context, thread_pool>)
-  auto& then(Context* t_context, Func t_func, Args&&... args)
+  auto& then(Context* context, Func func, Args&&... args)
   {
     std::lock_guard lock(m_shared_state->m_mutex);
 
     m_shared_state->m_success_handlers.push_back(
-      [t_context, t_func, ... args = std::forward<Args>(args)](const result_type& value)
+      [context, func, ... args = std::forward<Args>(args)](const result_type& value)
       {
-        (t_context->*t_func)(value, args...);
+        (context->*func)(value, args...);
       });
 
     return *this;
@@ -276,7 +243,7 @@ class future
 
   template <typename Func, typename... Args>
     requires plz::is_specialization_of_v<std::invoke_result_t<Func, result_type, Args...>, future>
-  auto then(Func&& t_func, Args&&... args)
+  auto then(Func&& func, Args&&... args)
   {
     using func_return_type = typename std::invoke_result_t<Func, result_type, Args...>;
 
@@ -289,14 +256,14 @@ class future
     std::lock_guard lock(m_shared_state->m_mutex);
 
     m_shared_state->m_success_handlers.push_back(
-      [t_func = std::move(t_func), promise, ... args = std::forward<Args>(args)](
+      [func = std::move(func), promise, ... args = std::forward<Args>(args)](
         const result_type& value) mutable
       {
         try
         {
           if constexpr(std::is_void_v<future_result_type>)
           {
-            t_func(value, args...)
+            func(value, args...)
               .then(
                 [promise]()
                 {
@@ -310,7 +277,7 @@ class future
           }
           else
           {
-            t_func(value, args...)
+            func(value, args...)
               .then(
                 [promise](const auto& result) mutable
                 {
@@ -343,7 +310,7 @@ class future
     requires(
       (!plz::is_specialization_of_v<std::invoke_result_t<Func, result_type, Args...>, future>) &&
       (!std::is_same_v<std::invoke_result_t<Func, result_type, Args...>, void>))
-  auto then(Func&& t_func, Args&&... args)
+  auto then(Func&& func, Args&&... args)
   {
     using func_return_type = typename std::invoke_result_t<Func, result_type, Args...>;
 
@@ -353,19 +320,19 @@ class future
     promise.m_shared_state->m_pool = m_shared_state->m_pool;
 
     m_shared_state->m_success_handlers.push_back(
-      [t_func = std::move(t_func), promise, ... args = std::forward<Args>(args)](
+      [func = std::move(func), promise, ... args = std::forward<Args>(args)](
         const result_type& value) mutable
       {
         try
         {
           if constexpr(std::is_same_v<func_return_type, void>)
           {
-            t_func(value, args...);
+            func(value, args...);
             promise.set_ready();
           }
           else
           {
-            promise.set_result(t_func(value, args...));
+            promise.set_result(func(value, args...));
           }
         }
         catch(...)
@@ -387,25 +354,24 @@ class future
   template <typename Context, typename Func, typename... Args>
     requires(!std::same_as<std::invoke_result_t<Func, Context&, result_type, Args...>, void>) &&
     (!std::same_as<Context, thread_pool>)
-  auto then(Context* t_context, Func&& t_func, Args&&... args)
+  auto then(Context* context, Func&& func, Args&&... args)
   {
     return then(
-      [t_context, t_func = std::move(t_func), ... args = std::forward<Args>(args)](
-        const auto& value)
+      [context, func = std::move(func), ... args = std::forward<Args>(args)](const auto& value)
       {
-        return (t_context->*t_func)(value, args...);
+        return (context->*func)(value, args...);
       });
   }
 
   template <typename Func, typename... Args>
-  auto then(thread_pool* pool, Func&& t_func, Args&&... args);
+  auto then(thread_pool* pool, Func&& func, Args&&... args);
 
   template <typename Func, typename... Args>
-  auto async_then(Func&& t_func, Args&&... args)
+  auto async_then(Func&& func, Args&&... args)
   {
     assert(m_shared_state->m_pool);
     return then(
-      m_shared_state->m_pool, std::forward<Func>(t_func), std::forward<Args>(args)...);
+      m_shared_state->m_pool, std::forward<Func>(func), std::forward<Args>(args)...);
   }
 
   template <typename Func>
@@ -478,7 +444,7 @@ class future<void>
   public:
   using result_type = void;
 
-  void wait() const
+  void get() const
   {
     std::unique_lock lock(m_shared_state->m_mutex);
 
@@ -496,14 +462,14 @@ class future<void>
 
   template <typename Func, typename... Args>
     requires std::same_as<std::invoke_result_t<Func, Args...>, void>
-  auto& then(Func&& t_func, Args&&... args)
+  auto& then(Func&& func, Args&&... args)
   {
     std::lock_guard lock(m_shared_state->m_mutex);
 
     m_shared_state->m_success_handlers.push_back(
-      [t_func, ... args = std::forward<Args>(args)]() mutable
+      [func, ... args = std::forward<Args>(args)]() mutable
       {
-        t_func(args...);
+        func(args...);
       });
 
     return *this;
@@ -511,14 +477,14 @@ class future<void>
 
   template <typename Context, typename Func, typename... Args>
     requires std::same_as<std::invoke_result_t<Func, Context&, Args...>, void>
-  auto& then(Context* t_context, Func t_func, Args&&... args)
+  auto& then(Context* context, Func func, Args&&... args)
   {
     std::lock_guard lock(m_shared_state->m_mutex);
 
     m_shared_state->m_success_handlers.push_back(
-      [t_context, t_func, ... args = std::forward<Args>(args)]()
+      [context, func, ... args = std::forward<Args>(args)]()
       {
-        (t_context->*t_func)(args...);
+        (context->*func)(args...);
       });
 
     return *this;
@@ -526,7 +492,7 @@ class future<void>
 
   template <typename Func, typename... Args>
     requires plz::specialization_of<std::invoke_result_t<Func, Args...>, future>
-  auto then(Func&& t_func, Args&&... args)
+  auto then(Func&& func, Args&&... args)
   {
     using func_return_type = typename std::invoke_result_t<Func, Args...>;
 
@@ -539,13 +505,13 @@ class future<void>
     std::lock_guard lock(m_shared_state->m_mutex);
 
     m_shared_state->m_success_handlers.push_back(
-      [t_func = std::move(t_func), promise, ... args = std::forward<Args>(args)]() mutable
+      [func = std::move(func), promise, ... args = std::forward<Args>(args)]() mutable
       {
         try
         {
           if constexpr(std::is_void_v<future_result_type>)
           {
-            t_func(args...)
+            func(args...)
               .then(
                 [promise]()
                 {
@@ -559,7 +525,7 @@ class future<void>
           }
           else
           {
-            t_func(args...)
+            func(args...)
               .then(
                 [promise](const auto& result) mutable
                 {
@@ -591,7 +557,7 @@ class future<void>
   template <typename Func, typename... Args>
     requires(!plz::specialization_of<std::invoke_result_t<Func, Args...>, future>) &&
     (!std::same_as<std::invoke_result_t<Func, Args...>, void>)
-  auto then(Func&& t_func, Args&&... args)
+  auto then(Func&& func, Args&&... args)
   {
     using func_return_type = typename std::invoke_result_t<Func, Args...>;
 
@@ -601,18 +567,18 @@ class future<void>
     promise.m_shared_state->m_pool = m_shared_state->m_pool;
 
     m_shared_state->m_success_handlers.push_back(
-      [t_func = std::move(t_func), promise, ... args = std::forward<Args>(args)]() mutable
+      [func = std::move(func), promise, ... args = std::forward<Args>(args)]() mutable
       {
         try
         {
           if constexpr(std::is_same_v<func_return_type, void>)
           {
-            t_func(args...);
+            func(args...);
             promise.set_ready();
           }
           else
           {
-            promise.set_result(t_func(args...));
+            promise.set_result(func(args...));
           }
         }
         catch(...)
@@ -633,16 +599,14 @@ class future<void>
 
   template <typename Context, typename Func, typename... Args>
     requires(!std::same_as<std::invoke_result_t<Func, Context&, Args...>, void>)
-  auto then(Context* t_context, Func&& t_func, Args&&... args)
+  auto then(Context* context, Func&& func, Args&&... args)
   {
     return then(
-      [t_context, t_func = std::move(t_func), ... args = std::forward<Args>(args)]()
+      [context, func = std::move(func), ... args = std::forward<Args>(args)]()
       {
-        return (t_context->*t_func)(args...);
+        return (context->*func)(args...);
       });
   }
-
-  //! Register an exception handler to be invoked when an exception of matching function parameter.
   template <typename Func>
   auto& on_exception(Func&& t_exception_handler)
   {
@@ -686,14 +650,14 @@ class future<void>
   }
 
   template <typename Func, typename... Args>
-  auto async_then(thread_pool* pool, Func&& t_func, Args&&... args);
+  auto async_then(thread_pool* pool, Func&& func, Args&&... args);
 
   template <typename Func, typename... Args>
-  auto async_then(Func&& t_func, Args&&... args)
+  auto async_then(Func&& func, Args&&... args)
   {
     assert(m_shared_state->m_pool);
     return async_then(
-      m_shared_state->m_pool, std::forward<Func>(t_func), std::forward<Args>(args)...);
+      m_shared_state->m_pool, std::forward<Func>(func), std::forward<Args>(args)...);
   }
 
   private:
@@ -745,7 +709,7 @@ class promise
 
   template <typename U>
     requires std::convertible_to<U, result_type>
-  void set_result(U&& t_result)
+  void set_result(U&& result)
   {
     std::lock_guard lock(m_shared_state->m_mutex);
 
@@ -756,11 +720,11 @@ class promise
 
     if constexpr(std::is_copy_assignable_v<result_type>)
     {
-      m_shared_state->m_result = std::forward<U>(t_result);
+      m_shared_state->m_result = std::forward<U>(result);
     }
     else
     {
-      m_shared_state->m_result = std::forward<U>(std::move(t_result));
+      m_shared_state->m_result = std::forward<U>(std::move(result));
     }
 
     m_shared_state->m_is_ready = true;
@@ -825,5 +789,5 @@ expected::promise<T, E> make_promise() noexcept
   return expected::make_promise<T, E>();
 }
 #endif
-} // namespace plz::async
+} // namespace plz
 #endif // __FUTURE_H__

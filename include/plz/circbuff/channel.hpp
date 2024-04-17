@@ -11,8 +11,8 @@
 #include <utility>
 #include <vector>
 
-#include "plz/thread_pool.hpp"
 #include "plz/help/array_traits.hpp"
+#include "plz/thread_pool.hpp"
 
 #include "concepts.hpp"
 #include "reader.hpp"
@@ -55,7 +55,7 @@ template <circular_buffer_ptr BufferPointer, typename Func>
 source_connection connect(source<BufferPointer>* source,
   sink<BufferPointer>* sink,
   Func&& func,
-  async::thread_pool* pool);
+  plz::thread_pool* pool);
 
 template <circular_buffer_ptr BufferPointer, typename Func>
 source_connection
@@ -350,7 +350,7 @@ connect(source<BufferPointer>* source, sink<BufferPointer>* sink, Func&& func)
 
 template <circular_buffer_ptr BufferPointer, typename Func>
 source_connection
-connect(source<BufferPointer>* source, sink<BufferPointer>* sink, Func&& func, async::thread_pool* pool)
+connect(source<BufferPointer>* source, sink<BufferPointer>* sink, Func&& func, plz::thread_pool* pool)
 {
   return source_connection{ source->register_notify_function(
     [sink, func = std::forward<Func>(func), pool](size_t count) mutable
@@ -369,7 +369,7 @@ source_connection
 async_connect(source<BufferPointer>* source, sink<BufferPointer>* sink, Func&& func)
 {
   return connect(
-    source, sink, std::forward<Func>(func), &async::thread_pool::global_instance());
+    source, sink, std::forward<Func>(func), &plz::thread_pool::global_instance());
 }
 
 template <circular_buffer_ptr BufferPointer>

@@ -7,7 +7,6 @@ project(cplease
 	HOMEPAGE_URL "https://github.com/yosriayed/cplease"
 )
 
-
 add_library(${PROJECT_NAME} INTERFACE)
 
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
