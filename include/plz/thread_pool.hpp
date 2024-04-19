@@ -9,8 +9,10 @@
 #include <stop_token>
 #include <thread>
 #include <type_traits>
+#include <variant>
 #include <vector>
 
+#include "plz/help/callable.hpp"
 #include "plz/help/type_traits.hpp"
 
 #include "futures.hpp"
@@ -27,10 +29,10 @@ namespace plz
 void set_threads_count(int num_threads);
 
 template <typename Func, typename... Args>
-auto run(Func&& function, Args&&... t_args);
+auto run(Func&& function, Args&&... args);
 
 template <std::ranges::range Range, typename Func, typename... Args>
-auto map(Range&& t_range, Func&& function, Args&&... t_args);
+auto map(Range&& t_range, Func&& function, Args&&... args);
 
 void wait();
 
@@ -41,6 +43,11 @@ void quit();
 
 class thread_pool
 {
+  public:
+  using task_type_st = plz::callable<void(std::stop_token)>;
+  using task_type    = plz::callable<void()>;
+  using task_variant = std::variant<task_type, task_type_st>;
+
   public:
   static void set_global_instance_thread_count(int num_threads)
   {
@@ -72,7 +79,7 @@ class thread_pool
     quit();
   }
 
-  void run(std::unique_ptr<packaged_task_base> task)
+  void run(task_variant&& task)
   {
     {
       std::lock_guard lock(m_mutex);
@@ -82,7 +89,7 @@ class thread_pool
         throw std::runtime_error("enqueue on stopped thread_pool");
       }
 
-      m_tasks.emplace(std::move(task));
+      m_tasks.push(std::move(task));
     }
 
     m_workers_wait_condition.notify_one();
@@ -90,54 +97,32 @@ class thread_pool
 
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args...>
-  auto run(Func&& function, Args&&... t_args)
+  auto run(Func&& function, Args&&... args)
     -> future<std::invoke_result_t<Func, Args...>>
   {
-    auto task = std::make_unique<plz::packaged_task<Func, Args...>>(
-      std::forward<Func>(function), std::forward<Args>(t_args)...);
+    packaged_task<Func, Args...> task{ std::forward<Func>(function),
+      std::forward<Args>(args)... };
 
-    auto future                            = task->get_future();
-    task->m_promise.m_shared_state->m_pool = this;
+    auto future                           = task.get_future();
+    task.m_promise.m_shared_state->m_pool = this;
 
-    {
-      std::lock_guard lock(m_mutex);
-
-      if(m_stop)
-      {
-        throw std::runtime_error("enqueue on stopped thread_pool");
-      }
-
-      m_tasks.emplace(std::move(task));
-    }
-
-    m_workers_wait_condition.notify_one();
+    run(task_variant(task_type::from(std::move(task))));
 
     return future;
   }
 
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args..., std::stop_token>
-  auto run(Func&& function, Args&&... t_args)
+  auto run(Func&& function, Args&&... args)
     -> future<std::invoke_result_t<Func, Args..., std::stop_token>>
   {
-    auto task = std::make_unique<packaged_task_st<Func, Args...>>(
-      std::forward<Func>(function), std::forward<Args>(t_args)...);
+    packaged_task_st<Func, Args...> task{ std::forward<Func>(function),
+      std::forward<Args>(args)... };
 
-    auto future                            = task->get_future();
-    task->m_promise.m_shared_state->m_pool = this;
+    auto future                           = task.get_future();
+    task.m_promise.m_shared_state->m_pool = this;
 
-    {
-      std::lock_guard lock(m_mutex);
-
-      if(m_stop)
-      {
-        throw std::runtime_error("enqueue on stopped thread_pool");
-      }
-
-      m_tasks.emplace(std::move(task));
-    }
-
-    m_workers_wait_condition.notify_one();
+    run(task_variant(task_type_st(std::move(task))));
 
     return future;
   }
@@ -146,28 +131,17 @@ class thread_pool
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args...> &&
     plz::specialization_of<std::invoke_result_t<Func, Args...>, std::expected>
-  auto run(Func&& function, Args&&... t_args)
+  auto run(Func&& function, Args&&... args)
     -> expected::future<typename std::invoke_result_t<Func, Args...>::value_type,
       typename std::invoke_result_t<Func, Args...>::error_type>
   {
-    auto task = std::make_unique<expected::packaged_task<Func, Args...>>(
-      std::forward<Func>(function), std::forward<Args>(t_args)...);
+    expected::packaged_task<Func, Args...> task{ std::forward<Func>(function),
+      std::forward<Args>(args)... };
 
-    auto future                            = task->get_future();
-    task->m_promise.m_shared_state->m_pool = this;
+    auto future                           = task.get_future();
+    task.m_promise.m_shared_state->m_pool = this;
 
-    {
-      std::lock_guard lock(m_mutex);
-
-      if(m_stop)
-      {
-        throw std::runtime_error("enqueue on stopped thread_pool");
-      }
-
-      m_tasks.emplace(std::move(task));
-    }
-
-    m_workers_wait_condition.notify_one();
+    run(task_variant(task_type(std::move(task))));
 
     return future;
   }
@@ -175,28 +149,17 @@ class thread_pool
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args..., std::stop_token> &&
     plz::specialization_of<std::invoke_result_t<Func, Args..., std::stop_token>, std::expected>
-  auto run(Func&& function, Args&&... t_args)
+  auto run(Func&& function, Args&&... args)
     -> expected::future<typename std::invoke_result_t<Func, Args..., std::stop_token>::value_type,
       typename std::invoke_result_t<Func, Args..., std::stop_token>::error_type>
   {
-    auto task = std::make_unique<expected::packaged_task_st<Func, Args...>>(
-      std::forward<Func>(function), std::forward<Args>(t_args)...);
+    expected::packaged_task_st<Func, Args...> task{ std::forward<Func>(function),
+      std::forward<Args>(args)... };
 
-    auto future                            = task->get_future();
-    task->m_promise.m_shared_state->m_pool = this;
+    auto future                           = task.get_future();
+    task.m_promise.m_shared_state->m_pool = this;
 
-    {
-      std::lock_guard lock(m_mutex);
-
-      if(m_stop)
-      {
-        throw std::runtime_error("enqueue on stopped thread_pool");
-      }
-
-      m_tasks.emplace(std::move(task));
-    }
-
-    m_workers_wait_condition.notify_one();
+    run(task_variant(task_type_st(std::move(task))));
 
     return future;
   }
@@ -204,7 +167,7 @@ class thread_pool
   template <std::ranges::range Range, typename Func, typename... Args>
     requires(
       !plz::specialization_of<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, std::expected>)
-  auto map(Range&& t_range, Func&& function, Args&&... t_args)
+  auto map(Range&& t_range, Func&& function, Args&&... args)
     -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, Range>
   {
     using KeyType = std::ranges::range_value_t<Range>;
@@ -221,15 +184,14 @@ class thread_pool
     {
       for(auto&& v : t_range)
       {
-        auto task = std::make_unique<plz::packaged_task<Func, KeyType, Args...>>(
-          std::forward<Func>(function),
+        packaged_task task{ std::forward<Func>(function),
           std::forward<KeyType>(v),
-          std::forward<Args>(t_args)...);
+          std::forward<Args>(args)... };
 
-        auto future                            = task->get_future();
-        task->m_promise.m_shared_state->m_pool = this;
+        auto future                           = task.get_future();
+        task.m_promise.m_shared_state->m_pool = this;
 
-        m_tasks.emplace(std::move(task));
+        m_tasks.emplace(task_type::from(std::move(task)));
 
         futuresMap.push_back({ v, std::move(future) });
       }
@@ -254,7 +216,7 @@ class thread_pool
 
   template <std::ranges::range Range, typename Func, typename... Args>
     requires plz::specialization_of<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, std::expected>
-  auto map(Range&& t_range, Func&& function, Args&&... t_args)
+  auto map(Range&& t_range, Func&& function, Args&&... args)
     -> expected::futures<typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>::value_type,
       typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>::error_type,
       Range>
@@ -277,15 +239,14 @@ class thread_pool
     {
       for(auto&& v : t_range)
       {
-        auto task = std::make_unique<expected::packaged_task<Func, KeyType, Args...>>(
-          std::forward<Func>(function),
+        expected::packaged_task task{ std::forward<Func>(function),
           std::forward<KeyType>(v),
-          std::forward<Args>(t_args)...);
+          std::forward<Args>(args)... };
 
-        auto future                            = task->get_future();
-        task->m_promise.m_shared_state->m_pool = this;
+        auto future                           = task.get_future();
+        task.m_promise.m_shared_state->m_pool = this;
 
-        m_tasks.emplace(std::move(task));
+        m_tasks.emplace(task_type::from(std::move(task)));
 
         futuresMap.push_back({ v, std::move(future) });
       }
@@ -311,7 +272,7 @@ class thread_pool
 
   template <std::ranges::range Range, typename Func, typename... Args>
     requires std::invocable<Func, std::ranges::range_value_t<Range>, Args...>
-  auto map(Range&& t_range, Func&& function, Args&&... t_args)
+  auto map(Range&& t_range, Func&& function, Args&&... args)
     -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, Range>
   {
     using KeyType = std::ranges::range_value_t<Range>;
@@ -328,15 +289,14 @@ class thread_pool
     {
       for(auto&& v : t_range)
       {
-        auto task = std::make_unique<plz::task<Func, KeyType, Args...>>(
-          std::forward<Func>(function),
+        packaged_task task{ std::forward<Func>(function),
           std::forward<KeyType>(v),
-          std::forward<Args>(t_args)...);
+          std::forward<Args>(args)... };
 
-        auto future                            = task->get_future();
-        task->m_promise.m_shared_state->m_pool = this;
+        auto future                           = task.get_future();
+        task.m_promise.m_shared_state->m_pool = this;
 
-        m_tasks.emplace(std::move(task));
+        m_tasks.emplace(task_type::from(std::move(task)));
 
         futuresMap.push_back({ v, std::move(future) });
       }
@@ -359,6 +319,54 @@ class thread_pool
     }
   }
 
+  template <std::ranges::range Range, typename Func, typename... Args>
+    requires std::invocable<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>
+  auto map(Range&& t_range, Func&& function, Args&&... args)
+    -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>, Range>
+  {
+    using KeyType = std::ranges::range_value_t<Range>;
+
+    using func_return_type =
+      typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>;
+
+    using FuturesMapType = typename futures<func_return_type, Range>::futures_map_type;
+
+    std::lock_guard lock(m_mutex);
+    FuturesMapType futuresMap;
+
+    if(!m_stop)
+    {
+      for(auto&& v : t_range)
+      {
+        packaged_task_st task{ std::forward<Func>(function),
+          std::forward<KeyType>(v),
+          std::forward<Args>(args)... };
+
+        auto future                           = task.get_future();
+        task.m_promise.m_shared_state->m_pool = this;
+
+        m_tasks.emplace(task_type_st::from(std::move(task)));
+
+        futuresMap.push_back({ v, std::move(future) });
+      }
+
+      futures<func_return_type, Range> futures(std::move(futuresMap));
+      futures.m_aggregate_promise.m_shared_state->m_pool = this;
+
+      auto size = std::ranges::size(t_range);
+
+      for(auto i = 0; i < size; ++i)
+      {
+        m_workers_wait_condition.notify_one();
+      }
+
+      return futures;
+    }
+    else
+    {
+      throw std::runtime_error("enqueue on stopped thread_pool");
+    }
+  }
 #endif
 
   void wait()
@@ -418,7 +426,7 @@ class thread_pool
   {
     while(!m_stop)
     {
-      std::unique_ptr<packaged_task_base> task;
+      task_variant task;
       {
         std::unique_lock<std::mutex> lock(m_mutex);
         m_workers_wait_condition.wait(lock,
@@ -438,7 +446,14 @@ class thread_pool
 
       ++m_busy_count;
 
-      task->run(stop_token);
+      if(std::holds_alternative<task_type>(task))
+      {
+        std::get<task_type>(task)();
+      }
+      else
+      {
+        std::get<task_type_st>(task)(stop_token);
+      }
 
       --m_busy_count;
 
@@ -455,7 +470,8 @@ class thread_pool
   }
 
   std::vector<std::jthread> m_threads;
-  std::queue<std::unique_ptr<packaged_task_base>> m_tasks;
+  std::queue<task_variant> m_tasks;
+
   std::mutex m_mutex;
   std::atomic<size_t> m_busy_count{ 0 };
   std::condition_variable m_workers_wait_condition;
@@ -468,18 +484,18 @@ class thread_pool
 };
 
 template <typename Func, typename... Args>
-auto run(Func&& function, Args&&... t_args)
+auto run(Func&& function, Args&&... args)
 {
   return thread_pool::global_instance().run(
-    std::forward<Func>(function), std::forward<Args>(t_args)...);
+    std::forward<Func>(function), std::forward<Args>(args)...);
 }
 
 template <std::ranges::range Range, typename Func, typename... Args>
-auto map(Range&& t_range, Func&& function, Args&&... t_args)
+auto map(Range&& t_range, Func&& function, Args&&... args)
 {
   return thread_pool::global_instance().map(std::forward<Range>(t_range),
     std::forward<Func>(function),
-    std::forward<Args>(t_args)...);
+    std::forward<Args>(args)...);
 }
 
 inline void wait()
@@ -508,8 +524,7 @@ template <typename Func, typename... Args>
 auto future<T>::then(thread_pool* pool, Func&& func, Args&&... args)
 {
   return then(
-    [pool, func = std::forward<Func>(func), ... args = std::forward<Args>(args)](
-      const auto& value)
+    [pool, func = std::forward<Func>(func), ... args = std::forward<Args>(args)](const auto& value)
     {
       return pool->run(func, value, args...);
     });
@@ -521,8 +536,7 @@ template <typename Func, typename... Args>
 auto expected::future<T, E>::then(thread_pool* pool, Func&& func, Args&&... args)
 {
   return then(
-    [pool, func = std::forward<Func>(func), ... args = std::forward<Args>(args)](
-      const auto& value)
+    [pool, func = std::forward<Func>(func), ... args = std::forward<Args>(args)](const auto& value)
     {
       return pool->run(func, value, args...);
     });

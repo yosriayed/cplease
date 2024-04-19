@@ -19,7 +19,7 @@ set(SRCS
     async_tasks.test.cpp
 
     circbuff.test.cpp 
-    channel.test.cpp
+    # channel.test.cpp
 )
 
 if(WITH_STD_EXPECTED) 

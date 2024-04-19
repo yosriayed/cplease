@@ -201,7 +201,7 @@ class source
   source_notify_function_id register_notify_function(Func&& func)
   {
     auto id = m_notify_function_id_counter++;
-    m_notif_funcs.push_back({ id, std::forward<Func>(func) });
+    m_notif_funcs.emplace_back({ id, std::move(func) });
     return id;
   }
 
