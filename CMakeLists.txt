@@ -13,12 +13,6 @@ target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
 target_include_directories(${PROJECT_NAME} INTERFACE include)
 
 option(BUILD_TESTS "Build tests" OFF)
-option(WITH_STD_EXPECTED "Support std::expected specialisations" OFF)
-
-if(WITH_STD_EXPECTED)
-    message("Building with std::expected specialisations")
-	target_compile_definitions(${PROJECT_NAME} INTERFACE WITH_STD_EXPECTED)
-endif()
 
 if(BUILD_TESTS)
 

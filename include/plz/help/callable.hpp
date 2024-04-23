@@ -1,7 +1,7 @@
 #ifndef CALLABLE_HPP
 #define CALLABLE_HPP
 
-// This code is shamelessly copied from:
+// Shamelessly copied from:
 // https://codereview.stackexchange.com/questions/14730/impossibly-fast-delegate-in-c11
 // I have made some minor modifications to the code.
 

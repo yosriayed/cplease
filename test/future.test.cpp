@@ -1,9 +1,12 @@
+#include <__expected/expected.h>
 #include <catch2/catch_test_macros.hpp>
 
+#include <numeric>
 #include <string>
 #include <thread>
 
 #include <plz/future.hpp>
+#include <plz/futures.hpp>
 
 TEST_CASE("future: same return type + syncrhonous tasks")
 {
@@ -314,7 +317,7 @@ TEST_CASE("future: asyncrhonous tasks functions")
 {
   try
   {
-    auto value = asynchTask1(42).then(asynchTask2).then(asynchTask3).get();
+    auto value = asynchTask1(42).then(&asynchTask2).then(&asynchTask3).get();
     CHECK(value == 42);
   }
   catch(...)
@@ -351,7 +354,7 @@ TEST_CASE("future: asyncrhonous Tasks Functions With Exception")
 {
   try
   {
-    asynchTask1(42).then(asynchTask2).then(asynchTask2_5).then(asynchTask3).get();
+    asynchTask1(42).then(&asynchTask2).then(&asynchTask2_5).then(&asynchTask3).get();
   }
   catch(const std::exception& exception)
   {
@@ -498,8 +501,8 @@ TEST_CASE("future: futureMemberFunctions + AsynchronousTasks")
 {
   FutureMemberFunctions q;
   auto value = q.memberAsynchTask1(42)
-                 .then(&q, &FutureMemberFunctions::memberAsynchTask2)
-                 .then(&q, &FutureMemberFunctions::memberAsynchTask3)
+                 .then(&FutureMemberFunctions::memberAsynchTask2, &q)
+                 .then(&FutureMemberFunctions::memberAsynchTask3, &q)
                  .then(
                    [](int value)
                    {
@@ -516,8 +519,8 @@ TEST_CASE("future: futureMemberFunctions + AsynchronousTasksWithException")
   {
     FutureMemberFunctions q;
     q.memberAsynchTask1(42)
-      .then(&q, &FutureMemberFunctions::memberAsynchTask2)
-      .then(&q, &FutureMemberFunctions::memberAsynchTask2_5)
+      .then(&FutureMemberFunctions::memberAsynchTask2, q)
+      .then(&FutureMemberFunctions::memberAsynchTask2_5, &q)
       .then(
         [](std::string value)
         {
@@ -572,7 +575,7 @@ TEST_CASE("future:Then with variadic arguments")
                       return i;
                     })
                   .then(
-                    [](int value, int i, int k)
+                    [](int k, int i, int value)
                     {
                       return value - i - k;
                     },
@@ -639,3 +642,96 @@ TEST_CASE("future: test then with move only type")
   CHECK(*value == 42);
 }
 
+TEST_CASE("future: void type")
+{
+  auto promise = plz::make_promise<void>();
+  auto future  = promise.get_future();
+
+  // Simulating an asynchronous task
+  std::thread(
+    [promise]() mutable
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      promise.set_ready();
+    })
+    .detach();
+
+  auto v = future
+             .on_exception(
+               [](const std::exception&)
+               {
+                 REQUIRE(false);
+               })
+             .then(
+               []()
+               {
+                 return 42;
+               })
+             .get();
+
+  CHECK(v == 42);
+}
+
+TEST_CASE("future: expected type")
+{
+  auto promise = plz::make_promise<std::expected<int, std::string>>();
+
+  auto future = promise.get_future();
+
+  // Simulating an asynchronous task
+  std::thread(
+    [promise]() mutable
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      promise.set_result(42);
+    })
+    .detach();
+
+  auto value = future
+                 .then(
+                   [](auto value)
+                   {
+                     return value.value() + 1;
+                   })
+                 .then(
+                   [](auto v)
+                   {
+                     return v;
+                   })
+                 .get(); // Wait for the entire chain to complete
+}
+
+TEST_CASE("future: multiple futures")
+{
+  std::array promises = {
+    plz::promise<double>(), plz::promise<double>(), plz::promise<double>()
+  };
+
+  auto futures = plz::make_futures<double, int>();
+
+  for(int i = 0; i < promises.size(); ++i)
+  {
+    futures.add_future(i, promises[i].get_future());
+
+    std::thread(
+      [i, promise = promises[i]]() mutable
+      {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        promise.set_result(i);
+      })
+      .detach();
+  }
+
+  double res1 = futures.get(0);
+  double res2 = futures.get(1);
+  double res3 = futures.get(2);
+
+  REQUIRE(res1 == 0);
+  REQUIRE(res2 == 1);
+  REQUIRE(res3 == 2);
+
+  std::vector<double> res = futures.get();
+  double acc              = std::accumulate(res.begin(), res.end(), 0.0);
+  
+  REQUIRE(acc == promises.size() * (promises.size() - 1) / 2);
+}

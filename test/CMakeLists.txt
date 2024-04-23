@@ -19,12 +19,8 @@ set(SRCS
     async_tasks.test.cpp
 
     circbuff.test.cpp 
-    # channel.test.cpp
+    channel.test.cpp
 )
-
-if(WITH_STD_EXPECTED) 
-    list(APPEND SRCS expected_future.test.cpp async_expected_tasks.test.cpp)
-endif()
 
 target_sources(${PROJECT_NAME} PRIVATE ${SRCS})
 

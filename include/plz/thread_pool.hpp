@@ -18,11 +18,6 @@
 #include "futures.hpp"
 #include "packaged_task.hpp"
 
-#ifdef WITH_STD_EXPECTED
-#include "expected/futures.hpp"
-#include "expected/packaged_task.hpp"
-#endif
-
 namespace plz
 {
 
@@ -32,7 +27,7 @@ template <typename Func, typename... Args>
 auto run(Func&& function, Args&&... args);
 
 template <std::ranges::range Range, typename Func, typename... Args>
-auto map(Range&& t_range, Func&& function, Args&&... args);
+auto map(Range&& range, Func&& function, Args&&... args);
 
 void wait();
 
@@ -66,9 +61,9 @@ class thread_pool
     return instance;
   }
 
-  thread_pool(size_t t_num_threads = std::thread::hardware_concurrency())
+  thread_pool(size_t num_threads = std::thread::hardware_concurrency())
   {
-    for(size_t i = 0; i < t_num_threads; ++i)
+    for(size_t i = 0; i < num_threads; ++i)
     {
       m_threads.emplace_back(std::bind_front(&thread_pool::thread_work, this));
     }
@@ -97,8 +92,7 @@ class thread_pool
 
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args...>
-  auto run(Func&& function, Args&&... args)
-    -> future<std::invoke_result_t<Func, Args...>>
+  auto run(Func&& function, Args&&... args) -> future<std::invoke_result_t<Func, Args...>>
   {
     packaged_task<Func, Args...> task{ std::forward<Func>(function),
       std::forward<Args>(args)... };
@@ -113,8 +107,8 @@ class thread_pool
 
   template <typename Func, typename... Args>
     requires std::invocable<Func, Args..., std::stop_token>
-  auto run(Func&& function, Args&&... args)
-    -> future<std::invoke_result_t<Func, Args..., std::stop_token>>
+  auto run(Func&& function,
+    Args&&... args) -> future<std::invoke_result_t<Func, Args..., std::stop_token>>
   {
     packaged_task_st<Func, Args...> task{ std::forward<Func>(function),
       std::forward<Args>(args)... };
@@ -127,167 +121,24 @@ class thread_pool
     return future;
   }
 
-#ifdef WITH_STD_EXPECTED
-  template <typename Func, typename... Args>
-    requires std::invocable<Func, Args...> &&
-    plz::specialization_of<std::invoke_result_t<Func, Args...>, std::expected>
-  auto run(Func&& function, Args&&... args)
-    -> expected::future<typename std::invoke_result_t<Func, Args...>::value_type,
-      typename std::invoke_result_t<Func, Args...>::error_type>
-  {
-    expected::packaged_task<Func, Args...> task{ std::forward<Func>(function),
-      std::forward<Args>(args)... };
-
-    auto future                           = task.get_future();
-    task.m_promise.m_shared_state->m_pool = this;
-
-    run(task_variant(task_type(std::move(task))));
-
-    return future;
-  }
-
-  template <typename Func, typename... Args>
-    requires std::invocable<Func, Args..., std::stop_token> &&
-    plz::specialization_of<std::invoke_result_t<Func, Args..., std::stop_token>, std::expected>
-  auto run(Func&& function, Args&&... args)
-    -> expected::future<typename std::invoke_result_t<Func, Args..., std::stop_token>::value_type,
-      typename std::invoke_result_t<Func, Args..., std::stop_token>::error_type>
-  {
-    expected::packaged_task_st<Func, Args...> task{ std::forward<Func>(function),
-      std::forward<Args>(args)... };
-
-    auto future                           = task.get_future();
-    task.m_promise.m_shared_state->m_pool = this;
-
-    run(task_variant(task_type_st(std::move(task))));
-
-    return future;
-  }
-
-  template <std::ranges::range Range, typename Func, typename... Args>
-    requires(
-      !plz::specialization_of<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, std::expected>)
-  auto map(Range&& t_range, Func&& function, Args&&... args)
-    -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, Range>
-  {
-    using KeyType = std::ranges::range_value_t<Range>;
-
-    using func_return_type =
-      typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>;
-
-    using FuturesMapType = typename futures<func_return_type, Range>::futures_map_type;
-
-    std::lock_guard lock(m_mutex);
-    FuturesMapType futuresMap;
-
-    if(!m_stop)
-    {
-      for(auto&& v : t_range)
-      {
-        packaged_task task{ std::forward<Func>(function),
-          std::forward<KeyType>(v),
-          std::forward<Args>(args)... };
-
-        auto future                           = task.get_future();
-        task.m_promise.m_shared_state->m_pool = this;
-
-        m_tasks.emplace(task_type::from(std::move(task)));
-
-        futuresMap.push_back({ v, std::move(future) });
-      }
-
-      futures<func_return_type, Range> futures(std::move(futuresMap));
-      futures.m_aggregate_promise.m_shared_state->m_pool = this;
-
-      auto size = std::ranges::size(t_range);
-
-      for(auto i = 0; i < size; ++i)
-      {
-        m_workers_wait_condition.notify_one();
-      }
-
-      return futures;
-    }
-    else
-    {
-      throw std::runtime_error("enqueue on stopped thread_pool");
-    }
-  }
-
-  template <std::ranges::range Range, typename Func, typename... Args>
-    requires plz::specialization_of<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, std::expected>
-  auto map(Range&& t_range, Func&& function, Args&&... args)
-    -> expected::futures<typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>::value_type,
-      typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>::error_type,
-      Range>
-  {
-    using KeyType = std::ranges::range_value_t<Range>;
-
-    using func_return_type =
-      typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>;
-
-    using result_type = typename func_return_type::value_type;
-    using error_type  = typename func_return_type::error_type;
-
-    using FuturesMapType =
-      typename expected::futures<result_type, error_type, Range>::futures_map_type;
-
-    std::lock_guard lock(m_mutex);
-    FuturesMapType futuresMap;
-
-    if(!m_stop)
-    {
-      for(auto&& v : t_range)
-      {
-        expected::packaged_task task{ std::forward<Func>(function),
-          std::forward<KeyType>(v),
-          std::forward<Args>(args)... };
-
-        auto future                           = task.get_future();
-        task.m_promise.m_shared_state->m_pool = this;
-
-        m_tasks.emplace(task_type::from(std::move(task)));
-
-        futuresMap.push_back({ v, std::move(future) });
-      }
-
-      expected::futures<result_type, error_type, Range> futures(std::move(futuresMap));
-      futures.m_aggregate_promise.m_shared_state->m_pool = this;
-
-      auto size = std::ranges::size(t_range);
-
-      for(auto i = 0; i < size; ++i)
-      {
-        m_workers_wait_condition.notify_one();
-      }
-
-      return futures;
-    }
-    else
-    {
-      throw std::runtime_error("enqueue on stopped thread_pool");
-    }
-  }
-#else
-
   template <std::ranges::range Range, typename Func, typename... Args>
     requires std::invocable<Func, std::ranges::range_value_t<Range>, Args...>
-  auto map(Range&& t_range, Func&& function, Args&&... args)
-    -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, Range>
+  auto map(Range&& range, Func&& function, Args&&... args)
+    -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>, std::ranges::range_value_t<Range>>
   {
     using KeyType = std::ranges::range_value_t<Range>;
 
     using func_return_type =
       typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args...>;
 
-    using FuturesMapType = typename futures<func_return_type, Range>::futures_map_type;
+    using FuturesMapType = typename futures<func_return_type, KeyType>::futures_map_type;
 
     std::lock_guard lock(m_mutex);
     FuturesMapType futuresMap;
 
     if(!m_stop)
     {
-      for(auto&& v : t_range)
+      for(auto&& v : range)
       {
         packaged_task task{ std::forward<Func>(function),
           std::forward<KeyType>(v),
@@ -301,10 +152,10 @@ class thread_pool
         futuresMap.push_back({ v, std::move(future) });
       }
 
-      futures<func_return_type, Range> futures(std::move(futuresMap));
+      futures<func_return_type, KeyType> futures(std::move(futuresMap));
       futures.m_aggregate_promise.m_shared_state->m_pool = this;
 
-      auto size = std::ranges::size(t_range);
+      auto size = std::ranges::size(range);
 
       for(auto i = 0; i < size; ++i)
       {
@@ -321,22 +172,23 @@ class thread_pool
 
   template <std::ranges::range Range, typename Func, typename... Args>
     requires std::invocable<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>
-  auto map(Range&& t_range, Func&& function, Args&&... args)
-    -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>, Range>
+  auto map(Range&& range, Func&& function, Args&&... args)
+    -> futures<std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>,
+      std::ranges::range_value_t<Range>>
   {
     using KeyType = std::ranges::range_value_t<Range>;
 
     using func_return_type =
       typename std::invoke_result_t<Func, std::ranges::range_value_t<Range>, Args..., std::stop_token>;
 
-    using FuturesMapType = typename futures<func_return_type, Range>::futures_map_type;
+    using FuturesMapType = typename futures<func_return_type, KeyType>::futures_map_type;
 
     std::lock_guard lock(m_mutex);
     FuturesMapType futuresMap;
 
     if(!m_stop)
     {
-      for(auto&& v : t_range)
+      for(auto&& v : range)
       {
         packaged_task_st task{ std::forward<Func>(function),
           std::forward<KeyType>(v),
@@ -350,10 +202,10 @@ class thread_pool
         futuresMap.push_back({ v, std::move(future) });
       }
 
-      futures<func_return_type, Range> futures(std::move(futuresMap));
+      futures<func_return_type, KeyType> futures(std::move(futuresMap));
       futures.m_aggregate_promise.m_shared_state->m_pool = this;
 
-      auto size = std::ranges::size(t_range);
+      auto size = std::ranges::size(range);
 
       for(auto i = 0; i < size; ++i)
       {
@@ -367,7 +219,6 @@ class thread_pool
       throw std::runtime_error("enqueue on stopped thread_pool");
     }
   }
-#endif
 
   void wait()
   {
@@ -491,11 +342,10 @@ auto run(Func&& function, Args&&... args)
 }
 
 template <std::ranges::range Range, typename Func, typename... Args>
-auto map(Range&& t_range, Func&& function, Args&&... args)
+auto map(Range&& range, Func&& function, Args&&... args)
 {
-  return thread_pool::global_instance().map(std::forward<Range>(t_range),
-    std::forward<Func>(function),
-    std::forward<Args>(args)...);
+  return thread_pool::global_instance().map(
+    std::forward<Range>(range), std::forward<Func>(function), std::forward<Args>(args)...);
 }
 
 inline void wait()
@@ -529,19 +379,6 @@ auto future<T>::then(thread_pool* pool, Func&& func, Args&&... args)
       return pool->run(func, value, args...);
     });
 }
-
-#ifdef WITH_STD_EXPECTED
-template <typename T, typename E>
-template <typename Func, typename... Args>
-auto expected::future<T, E>::then(thread_pool* pool, Func&& func, Args&&... args)
-{
-  return then(
-    [pool, func = std::forward<Func>(func), ... args = std::forward<Args>(args)](const auto& value)
-    {
-      return pool->run(func, value, args...);
-    });
-}
-#endif
 
 } // namespace plz
 
