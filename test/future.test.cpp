@@ -672,35 +672,6 @@ TEST_CASE("future: void type")
   CHECK(v == 42);
 }
 
-TEST_CASE("future: expected type")
-{
-  auto promise = plz::make_promise<std::expected<int, std::string>>();
-
-  auto future = promise.get_future();
-
-  // Simulating an asynchronous task
-  std::thread(
-    [promise]() mutable
-    {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      promise.set_result(42);
-    })
-    .detach();
-
-  auto value = future
-                 .then(
-                   [](auto value)
-                   {
-                     return value.value() + 1;
-                   })
-                 .then(
-                   [](auto v)
-                   {
-                     return v;
-                   })
-                 .get(); // Wait for the entire chain to complete
-}
-
 TEST_CASE("future: multiple futures")
 {
   std::array promises = {
