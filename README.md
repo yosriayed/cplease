@@ -1,5 +1,5 @@
 # cplease
-CppParallelEase (or cplease) is a C++ header-only library that tries to provide some improved primitives to ease the writing of parallel and asynchronous c++ tasks
+CppParallelEase (or cplease) is a C++ header-only library that tries to provide some usefull tools to ease the writing of parallel and asynchronous c++ tasks
 - [future/promise](#future_promise)
 - [multiple futures/promises](#futures_promises)
 - [thread_pool](#thread_pool)
