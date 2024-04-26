@@ -9,7 +9,7 @@ CppParallelEase (or cplease) is a C++ header-only library that tries to provide 
 ## <a id="future_promise"></a> future/promise  
 
 The pair of `plz::future` and `plz::promise` classes are similiar to `std::promise`
-and `std::future`. They provide a mechanism to to access the result of asynchronous operations.
+and `std::future`. They provide a mechanism to to access the result of asynchronous operations. However, `plz::future` additionally enables setting up callbacks for both successful results and failures.
 
 The creator of the promise class can set a value
 using the `set_result()` or set an exception of any type using `set_exception()`. The
