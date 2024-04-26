@@ -16,7 +16,7 @@ using the `set_result()` or set an exception of any type using `set_exception()`
 associated future object can retrieve the value using the `get()` method which
 will block the calling thread until the promise is fulfilled. The `take()` method can also be used to move out the result from the shared state of promise/future pair. If an exception is thrown during the computation, the `get()` methods will rethrow the exception.
 
-The future class also provides a `then()` method that allows the user to attach
+The future class provides a `then()` method that allows the user to attach
 an arbitray continuation to the result of the future, which will be executed
 when the result is ready. The `then()` method returns a new future that
 represents the result of the continuation.
